@@ -1,0 +1,163 @@
+from digit_interface import Digit
+import cv2
+import numpy as np
+import time
+import random
+import rospy
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
+#import os
+
+############ Sensor Initialization #############
+
+# Unique serial numbers for your Tacto sensors
+#serial_number_1 = "D20896"
+serial_number_1 = "D20891"
+serial_number_2 = "D20888"
+
+# Initialize the sensors
+d2 = Digit(serial_number_1)
+d4 = Digit(serial_number_2)
+
+# Connect to the sensors
+d2.connect()
+d4.connect()
+
+##################################################
+
+'''
+Assuming that this code is meant to display a preview od sensor frames. Uncomment/remove when known for sure.
+###############################################################
+start_time = time.time()
+while time.time() - start_time < 3:  # Show images for 5 seconds
+    frame2 = d2.get_frame()
+    frame4 = d4.get_frame()
+    
+    # Display the frames
+    cv2.imshow("Sensor 2 View", frame2)
+    cv2.imshow("Sensor 4 View", frame4)
+    
+    # Wait for a short period to update the display
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+frame2_old = d2.get_frame()
+frame4_old = d4.get_frame()
+# cv2.imwrite(f"The_Collected_Data/NotConnected_2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+# cv2.imwrite(f"The_Collected_Data/NotConnected_4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+###############################################################
+
+'''
+
+# Assuming that these arrays manually define the limits of the hand joints. 
+initial_pos= np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.823835, 0.0, 0.0, 0.0])
+min_pos= np.array([-0.47, -0.2, -0.17, -0.23, -0.47, -0.2, -0.17, -0.23, -0.47, -0.2, -0.17, -0.23, 0.26, -0.10, -0.19, -0.16])
+max_pos= np.array([ 0.47, 1.61,  1.71,  1.62,  0.47,  1.61, 1.71,  1.62,  0.47,  1.61, 1.71,  1.62, 1.40,  1.16,  1.64,  1.72])
+
+# Assuming that this is setting up the hand (joints) in a desired starting position. 
+act_init_pos= np.array(initial_pos)
+act_init_pos[4]= .7*min_pos[4]+ 0.3*initial_pos[4]
+act_init_pos[6]= (max_pos[4]+ initial_pos[4])/2
+act_init_pos[7]= initial_pos[7]
+act_init_pos[12]= max_pos[12]
+act_init_pos[13]= .85*initial_pos[13]+ .15*max_pos[13]
+
+# Assuming that this defines the ideal final position of the hand (joints).
+act_fina_pos= np.array(initial_pos)
+act_fina_pos[4]= .7*min_pos[4]+ .3*initial_pos[4]
+act_fina_pos[5]= max_pos[5]
+act_fina_pos[6]= max_pos[6]
+act_fina_pos[7]= min_pos[7]
+act_fina_pos[12]= max_pos[12]
+act_fina_pos[13]= .85*initial_pos[13]+ .15*max_pos[13]
+act_fina_pos[14]= max_pos[14]
+act_fina_pos[15]= min_pos[15]
+
+# Type_var_1= type(act_fina_pos[1])
+# print(Type_var_1)
+difference= act_fina_pos-act_init_pos # defines the magnitude of movement needed for each joint.
+
+# Initialize ROS pub to the hand.
+pub = rospy.Publisher('/allegroHand_0/joint_cmd', JointState, queue_size=10)
+rospy.init_node('Controller_Node')
+rate = rospy.Rate(10) # 10hz
+rospy.sleep(1.0)
+
+msg = JointState() # assuming that this is to hold joint position data.
+
+Object= input("Name the object please") # take input to name the object beign held by the hand.
+
+# Funtion to communicate movements commands (positions) to the joints. 
+def talker(positions):
+    # while not rospy.is_shutdown():
+    msg.position = positions
+    rospy.loginfo(msg)
+    pub.publish(msg)
+    rate.sleep()
+    rospy.sleep(1.0)
+
+'''
+Next steps: 
+- Code to detect contact
+- Code to capture images (no_contact, unstable_contact, stable_contact)
+'''
+
+# Initializing joint positions.
+positions= act_init_pos
+if __name__ == '__main__':
+        try:
+            talker(positions)
+        except rospy.ROSInterruptException:
+            pass
+input("Start Moving?")
+
+num_step= 20
+joint_step_size= difference/num_step
+
+ii=1
+while ii <num_step+1:
+    start_time = time.time()
+
+    '''
+    while time.time() - start_time < .05:  # Show images for 5 seconds
+        frame2 = d2.get_frame()
+        frame4 = d4.get_frame()
+    
+        # Display the frames
+        cv2.imshow("Sensor 2 View", frame2)
+        cv2.imshow("Sensor 4 View", frame4)
+    
+        # Wait for a short period to update the display
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    '''
+
+    frame2 = d2.get_frame()
+    frame4 = d4.get_frame()
+    cv2.imwrite(f"The_Collected_Data/NotConnected_2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+    cv2.imwrite(f"The_Collected_Data/NotConnected_4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+
+    # Initializing contact values to 1 (No contact)
+    km_2= 1
+    km_4= 1
+
+    ''' Assign contact detection values here '''
+
+    km= np.array([km_2, km_4])
+    
+    Bin_move= np.array([0, 0, 0, 0, km[0], km[0], km[0], km[0], 0, 0, 0, 0, km[1], km[1], km[1], km[1]])
+    Motion_stp= Bin_move*joint_step_size
+    positions += Motion_stp
+
+    if __name__ == '__main__':
+        try:
+            talker(positions)
+        except rospy.ROSInterruptException:
+            pass
+
+    ii= ii+1
+
+    if km[0]+km[1]==0:
+        ii= num_step+1
+        cv2.imwrite(f"The_Collected_Data/stable2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f"The_Collected_Data/stable4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+
