@@ -161,3 +161,49 @@ while ii <num_step+1:
         cv2.imwrite(f"The_Collected_Data/stable2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
         cv2.imwrite(f"The_Collected_Data/stable4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
 
+input("Should I start the ustable labeling?")
+#############################################################
+stable_pos= positions
+num_stp_random= 20
+Joint_Rand_Range= (max_pos - min_pos)/num_stp_random
+#print(Joint_Rand_Range)
+##############################################################
+
+# Define the duration and interval for capturing frames
+num_frames= 200
+
+# Capture frames in a loop
+start_time = time.time()
+for i in range(num_frames):
+    ran_move_stp_sz_1= np.array([0, 0, 0, 0])
+    ran_move_stp_sz_2= np.random.random((1,4))[0]*2-np.ones((1,4))
+    ran_move_stp_sz_2= ran_move_stp_sz_2[0]
+    ran_move_stp_sz_3= np.array([0, 0, 0, 0])
+    ran_move_stp_sz_4= np.random.random((1,4))[0]*2-np.ones((1,4))
+    ran_move_stp_sz_4= ran_move_stp_sz_4[0]
+    ran_move_stp_sz= np.concatenate((ran_move_stp_sz_1, ran_move_stp_sz_2, ran_move_stp_sz_3, ran_move_stp_sz_4))
+
+    Eps= ran_move_stp_sz*Joint_Rand_Range
+    positions = stable_pos+ Eps
+
+    if __name__ == '__main__':
+            try:
+                talker(positions)
+            except rospy.ROSInterruptException:
+                pass
+    for shot in range(6):
+        frame2 = d2.get_frame()
+        frame4 = d4.get_frame()
+        cv2.imwrite(f"The_Collected_Data/unstable2_{Object}_{i}_{shot}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f"The_Collected_Data/unstable4_{Object}_{i}_{shot}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+        rospy.sleep(1/30)
+    positions = stable_pos
+    if __name__ == '__main__':
+            try:
+                talker(positions)
+            except rospy.ROSInterruptException:
+                pass
+    rospy.sleep(.2)
+
+
+print("Image capture complete.")
