@@ -95,11 +95,52 @@ def talker(positions):
     rate.sleep()
     rospy.sleep(1.0)
 
-'''
-Next steps: 
-- Code to detect contact
-- Code to capture images (no_contact, unstable_contact, stable_contact)
-'''
+############## Contact detection ##################
+
+#load images into numpy arrays
+def load_image(filepath):
+    img = Image.open(filepath)
+    return np.asarray(img).astype(float)/255
+
+#takes an input of images to outout a noise threshold for the specific images.
+def determine_noise(images):
+    mean_img = np.mean(images, axis=0)
+    N = images.shape[0]
+    
+    differences = []
+    for i in range(N):
+        matrix = images[i]
+        for j in range(N):
+            if i != j:
+                diff = np.abs(matrix - images[j])
+                differences.append(diff)
+
+    differences = np.array(differences)
+
+    noise_range = calculate_range(mean_img, differences)
+    return noise_range
+
+def calculate_range(mean_matrix, differences):
+    max_diff = np.max(differences)
+    average_of_meanMatrix = np.mean(max_diff)
+
+    min = average_of_meanMatrix - max_diff
+    max = average_of_meanMatrix + max_diff
+
+    noise_range = np.array([min, max])
+    return noise_range
+
+def detect_contact(imgs_withoutContact, contactImg):
+    threshold = determine_noise(imgs_withoutContact)
+    ChangeImg = contactImg - np.mean(imgs_withoutContact, axis=0)
+    mean_changeImg = np.mean(ChangeImg)
+
+    if mean_changeImg < threshold[0] or mean_changeImg > threshold[1]:
+        return 0
+    else:
+        return 1
+     
+########################################################
 
 # Initializing joint positions.
 positions= act_init_pos
@@ -140,7 +181,11 @@ while ii <num_step+1:
     km_2= 1
     km_4= 1
 
-    ''' Assign contact detection values here '''
+    ''' Assign contact detection values here, the method defined in the comment below can be used.'''
+
+    # detect_contact(imgs_withoutContact, contactImg)
+    # imgs_withoutContact: should be a set of images that display no contact.
+    # contactImg: Image to test for contact.
 
     km= np.array([km_2, km_4])
     
