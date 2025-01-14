@@ -10,8 +10,7 @@ from std_msgs.msg import Float32
 
 ############ Sensor Initialization #############
 
-# Unique serial numbers for your Tacto sensors
-#serial_number_1 = "D20896"
+# Unique serial numbers for Tacto sensors
 serial_number_1 = "D20891"
 serial_number_2 = "D20888"
 
@@ -19,14 +18,14 @@ serial_number_2 = "D20888"
 d2 = Digit(serial_number_1)
 d4 = Digit(serial_number_2)
 
-# Connect to the sensors
+# Connect for data collection
 d2.connect()
 d4.connect()
 
 ##################################################
 
 '''
-Assuming that this code is meant to display a preview od sensor frames. Uncomment/remove when known for sure.
+Assuming that this code is meant to display a preview of sensor frames. Uncomment/remove when known for sure.
 ###############################################################
 start_time = time.time()
 while time.time() - start_time < 3:  # Show images for 5 seconds
@@ -74,7 +73,7 @@ act_fina_pos[15]= min_pos[15]
 
 # Type_var_1= type(act_fina_pos[1])
 # print(Type_var_1)
-difference= act_fina_pos-act_init_pos # defines the magnitude of movement needed for each joint.
+difference= act_fina_pos - act_init_pos # defines the magnitude of movement needed for each joint.
 
 # Initialize ROS pub to the hand.
 pub = rospy.Publisher('/allegroHand_0/joint_cmd', JointState, queue_size=10)
@@ -96,11 +95,12 @@ def talker(positions):
     rospy.sleep(1.0)
 
 ############## Contact detection ##################
-
-#load images into numpy arrays
+'''
+# load images into numpy arrays
 def load_image(filepath):
     img = Image.open(filepath)
     return np.asarray(img).astype(float)/255
+'''
 
 #takes an input of images to outout a noise threshold for the specific images.
 def determine_noise(images):
@@ -142,8 +142,14 @@ def detect_contact(imgs_withoutContact, contactImg):
      
 ########################################################
 
+# Collecting baseline (NotConnected) images
+num_baseline_frames = 50
+imgs_withoutContact_2 = [np.asarray(d2.get_frame()) for _ in range(num_baseline_frames)]
+imgs_withoutContact_4 = [np.asarray(d4.get_frame()) for _ in range(num_baseline_frames)]
+
 # Initializing joint positions.
 positions= act_init_pos
+
 if __name__ == '__main__':
         try:
             talker(positions)
@@ -172,20 +178,19 @@ while ii <num_step+1:
             break
     '''
 
-    frame2 = d2.get_frame()
-    frame4 = d4.get_frame()
+    frame2 = np.asarray(d2.get_frame())
+    frame4 = np.asarray(d4.get_frame())
     cv2.imwrite(f"The_Collected_Data/NotConnected_2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
     cv2.imwrite(f"The_Collected_Data/NotConnected_4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
 
-    # Initializing contact values to 1 (No contact)
-    km_2= 1
-    km_4= 1
-
-    ''' Assign contact detection values here, the method defined in the comment below can be used.'''
-
-    # detect_contact(imgs_withoutContact, contactImg)
-    # imgs_withoutContact: should be a set of images that display no contact.
-    # contactImg: Image to test for contact.
+    ''' 
+    Contact detection: 
+    -  detect_contact(imgs_withoutContact, contactImg) return 0 for contact and 1 for no contact.
+    -  imgs_withoutContact: should be a set of images that display no contact.
+    -  contactImg: Image to test for contact.
+    '''
+    km_2= detect_contact(imgs_withoutContact_2, frame2)
+    km_4= detect_contact(imgs_withoutContact_4, frame4)
 
     km= np.array([km_2, km_4])
     
@@ -201,8 +206,8 @@ while ii <num_step+1:
 
     ii= ii+1
 
-    if km[0]+km[1]==0:
-        ii= num_step+1
+    if np.sum(km) == 0:
+        ii= num_step + 1
         cv2.imwrite(f"The_Collected_Data/stable2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
         cv2.imwrite(f"The_Collected_Data/stable4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
 
