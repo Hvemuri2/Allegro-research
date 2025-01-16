@@ -1,0 +1,259 @@
+from digit_interface import Digit
+import cv2
+import numpy as np
+import time
+import random
+import rospy
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Float32
+#import os
+
+############ Sensor Initialization #############
+
+# Unique serial numbers for Tacto sensors
+serial_number_1 = "D20891"
+serial_number_2 = "D20888"
+
+# Initialize the sensors
+d2 = Digit(serial_number_1)
+d4 = Digit(serial_number_2)
+
+# Connect for data collection
+d2.connect()
+d4.connect()
+
+##################################################
+
+'''
+Assuming that this code is meant to display a preview of sensor frames. Uncomment/remove when known for sure.
+###############################################################
+start_time = time.time()
+while time.time() - start_time < 3:  # Show images for 5 seconds
+    frame2 = d2.get_frame()
+    frame4 = d4.get_frame()
+    
+    # Display the frames
+    cv2.imshow("Sensor 2 View", frame2)
+    cv2.imshow("Sensor 4 View", frame4)
+    
+    # Wait for a short period to update the display
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+frame2_old = d2.get_frame()
+frame4_old = d4.get_frame()
+# cv2.imwrite(f"The_Collected_Data/NotConnected_2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+# cv2.imwrite(f"The_Collected_Data/NotConnected_4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+###############################################################
+
+'''
+
+# Assuming that these arrays manually define the limits of the hand joints. 
+initial_pos= np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.823835, 0.0, 0.0, 0.0])
+min_pos= np.array([-0.47, -0.2, -0.17, -0.23, -0.47, -0.2, -0.17, -0.23, -0.47, -0.2, -0.17, -0.23, 0.26, -0.10, -0.19, -0.16])
+max_pos= np.array([ 0.47, 1.61,  1.71,  1.62,  0.47,  1.61, 1.71,  1.62,  0.47,  1.61, 1.71,  1.62, 1.40,  1.16,  1.64,  1.72])
+
+# Assuming that this is setting up the hand (joints) in a desired starting position. 
+act_init_pos= np.array(initial_pos)
+act_init_pos[4]= .7*min_pos[4]+ 0.3*initial_pos[4]
+act_init_pos[6]= (max_pos[4]+ initial_pos[4])/2
+act_init_pos[7]= initial_pos[7]
+act_init_pos[12]= max_pos[12]
+act_init_pos[13]= .85*initial_pos[13]+ .15*max_pos[13]
+
+# Assuming that this defines the ideal final position of the hand (joints).
+act_fina_pos= np.array(initial_pos)
+act_fina_pos[4]= .7*min_pos[4]+ .3*initial_pos[4]
+act_fina_pos[5]= max_pos[5]
+act_fina_pos[6]= max_pos[6]
+act_fina_pos[7]= min_pos[7]
+act_fina_pos[12]= max_pos[12]
+act_fina_pos[13]= .85*initial_pos[13]+ .15*max_pos[13]
+act_fina_pos[14]= max_pos[14]
+act_fina_pos[15]= min_pos[15]
+
+# Type_var_1= type(act_fina_pos[1])
+# print(Type_var_1)
+difference= act_fina_pos - act_init_pos # defines the magnitude of movement needed for each joint.
+
+# Initialize ROS pub to the hand.
+pub = rospy.Publisher('/allegroHand_0/joint_cmd', JointState, queue_size=10)
+rospy.init_node('Controller_Node')
+rate = rospy.Rate(10) # 10hz
+rospy.sleep(1.0)
+
+msg = JointState() # assuming that this is to hold joint position data.
+
+Object= input("Name the object please") # take input to name the object beign held by the hand.
+
+# Funtion to communicate movements commands (positions) to the joints. 
+def talker(positions):
+    # while not rospy.is_shutdown():
+    msg.position = positions
+    rospy.loginfo(msg)
+    pub.publish(msg)
+    rate.sleep()
+    rospy.sleep(1.0)
+
+############## Contact detection ##################
+'''
+# load images into numpy arrays
+def load_image(filepath):
+    img = Image.open(filepath)
+    return np.asarray(img).astype(float)/255
+'''
+
+#takes an input of images to outout a noise threshold for the specific images.
+def determine_noise(images):
+    mean_img = np.mean(images, axis=0)
+    N = images.shape[0]
+    
+    differences = []
+    for i in range(N):
+        matrix = images[i]
+        for j in range(N):
+            if i != j:
+                diff = np.abs(matrix - images[j])
+                differences.append(diff)
+
+    differences = np.array(differences)
+
+    noise_range = calculate_range(mean_img, differences)
+    return noise_range
+
+def calculate_range(mean_matrix, differences):
+    max_diff = np.max(differences)
+    average_of_meanMatrix = np.mean(max_diff)
+
+    min = average_of_meanMatrix - max_diff
+    max = average_of_meanMatrix + max_diff
+
+    noise_range = np.array([min, max])
+    return noise_range
+
+def detect_contact(imgs_withoutContact, contactImg):
+    threshold = determine_noise(imgs_withoutContact)
+    ChangeImg = contactImg - np.mean(imgs_withoutContact, axis=0)
+    mean_changeImg = np.mean(ChangeImg)
+
+    if mean_changeImg < threshold[0] or mean_changeImg > threshold[1]:
+        return 0
+    else:
+        return 1
+     
+########################################################
+
+# Collecting baseline (NotConnected) images
+num_baseline_frames = 50
+imgs_withoutContact_2 = [np.asarray(d2.get_frame()) for _ in range(num_baseline_frames)]
+imgs_withoutContact_4 = [np.asarray(d4.get_frame()) for _ in range(num_baseline_frames)]
+
+# Initializing joint positions.
+positions= act_init_pos
+
+if __name__ == '__main__':
+        try:
+            talker(positions)
+        except rospy.ROSInterruptException:
+            pass
+input("Start Moving?")
+
+num_step= 20
+joint_step_size= difference/num_step
+
+ii=1
+while ii <num_step+1:
+    start_time = time.time()
+
+    '''
+    while time.time() - start_time < .05:  # Show images for 5 seconds
+        frame2 = d2.get_frame()
+        frame4 = d4.get_frame()
+    
+        # Display the frames
+        cv2.imshow("Sensor 2 View", frame2)
+        cv2.imshow("Sensor 4 View", frame4)
+    
+        # Wait for a short period to update the display
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    '''
+
+    frame2 = np.asarray(d2.get_frame())
+    frame4 = np.asarray(d4.get_frame())
+    cv2.imwrite(f"The_Collected_Data/NotConnected_2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+    cv2.imwrite(f"The_Collected_Data/NotConnected_4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+
+    ''' 
+    Contact detection: 
+    -  detect_contact(imgs_withoutContact, contactImg) return 0 for contact and 1 for no contact.
+    -  imgs_withoutContact: should be a set of images that display no contact.
+    -  contactImg: Image to test for contact.
+    '''
+    km_2= detect_contact(imgs_withoutContact_2, frame2)
+    km_4= detect_contact(imgs_withoutContact_4, frame4)
+
+    km= np.array([km_2, km_4])
+    
+    Bin_move= np.array([0, 0, 0, 0, km[0], km[0], km[0], km[0], 0, 0, 0, 0, km[1], km[1], km[1], km[1]])
+    Motion_stp= Bin_move*joint_step_size
+    positions += Motion_stp
+
+    if __name__ == '__main__':
+        try:
+            talker(positions)
+        except rospy.ROSInterruptException:
+            pass
+
+    ii= ii+1
+
+    if np.sum(km) == 0:
+        ii= num_step + 1
+        cv2.imwrite(f"The_Collected_Data/stable2_{Object}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f"The_Collected_Data/stable4_{Object}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+
+input("Should I start the ustable labeling?")
+#############################################################
+stable_pos= positions
+num_stp_random= 20
+Joint_Rand_Range= (max_pos - min_pos)/num_stp_random
+#print(Joint_Rand_Range)
+##############################################################
+
+# Define the duration and interval for capturing frames
+num_frames= 200
+
+# Capture frames in a loop
+start_time = time.time()
+for i in range(num_frames):
+    ran_move_stp_sz_1= np.array([0, 0, 0, 0])
+    ran_move_stp_sz_2= np.random.random((1,4))[0]*2-np.ones((1,4))
+    ran_move_stp_sz_2= ran_move_stp_sz_2[0]
+    ran_move_stp_sz_3= np.array([0, 0, 0, 0])
+    ran_move_stp_sz_4= np.random.random((1,4))[0]*2-np.ones((1,4))
+    ran_move_stp_sz_4= ran_move_stp_sz_4[0]
+    ran_move_stp_sz= np.concatenate((ran_move_stp_sz_1, ran_move_stp_sz_2, ran_move_stp_sz_3, ran_move_stp_sz_4))
+
+    Eps= ran_move_stp_sz*Joint_Rand_Range
+    positions = stable_pos+ Eps
+
+    if __name__ == '__main__':
+            try:
+                talker(positions)
+            except rospy.ROSInterruptException:
+                pass
+    for shot in range(6):
+        frame2 = d2.get_frame()
+        frame4 = d4.get_frame()
+        cv2.imwrite(f"The_Collected_Data/unstable2_{Object}_{i}_{shot}.png", cv2.cvtColor(np.array(frame2), cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f"The_Collected_Data/unstable4_{Object}_{i}_{shot}.png", cv2.cvtColor(np.array(frame4), cv2.COLOR_RGB2BGR))
+        rospy.sleep(1/30)
+    positions = stable_pos
+    if __name__ == '__main__':
+            try:
+                talker(positions)
+            except rospy.ROSInterruptException:
+                pass
+    rospy.sleep(.2)
+
+
+print("Image capture complete.")
